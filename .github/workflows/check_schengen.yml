@@ -2,7 +2,7 @@ name: "Schengen Slot Watcher"
 
 on:
   schedule:
-    - cron: "*/45 * * * *"   # every 45 minutes
+    - cron: "*/25 * * * *"   # every 45 minutes
   workflow_dispatch:        # allow manual runs
 
 jobs:
