@@ -32,16 +32,28 @@ def save_last_state(state: dict):
         json.dump(state, f)
 
 def send_telegram(text: str):
+    """
+    Send a Telegram message. 
+    Uses parse_mode="Markdown" to reduce escaping issues.
+    Wrap in try/except to log any errors Telegram returns.
+    """
     if not TELEGRAM_TOKEN or not CHAT_ID:
         raise RuntimeError("Missing TELEGRAM_TOKEN or CHAT_ID environment variable")
     url = f"https://api.telegram.org/bot{TELEGRAM_TOKEN}/sendMessage"
     payload = {
         "chat_id": CHAT_ID,
         "text": text,
-        "parse_mode": "MarkdownV2",
+        "parse_mode": "Markdown",  # switched from MarkdownV2 to Markdown
     }
-    resp = requests.post(url, data=payload, timeout=10)
-    resp.raise_for_status()
+    try:
+        resp = requests.post(url, data=payload, timeout=10)
+        resp.raise_for_status()
+    except requests.exceptions.HTTPError as e:
+        # Print the exact payload and response for debugging
+        print("### ERROR: Telegram rejected the message ###")
+        print(f"Payload was: {json.dumps(payload, ensure_ascii=False)}")
+        print(f"Response: {e.response.status_code} → {e.response.text}")
+        raise
 
 def normalize_country_name(raw_name: str) -> str:
     """
@@ -112,29 +124,4 @@ def check_slot():
         if country_norm.lower() == TARGET_COUNTRY.lower():
             found_country = True
 
-            # Extract the earliest-available date from <span class="font-bold">
-            span = row.find("span", class_="font-bold")
-            earliest_text = span.get_text(strip=True) if span else ""
-
-            if earliest_text != prev_value:
-                # Only notify if it's not empty/No availability/Waitlist Open
-                if earliest_text and earliest_text not in ("No availability", "Waitlist Open"):
-                    message = (
-                        f"🎉 *{TARGET_COUNTRY}* slot opened in *{CITY_SLUG.title()}*!  \n"
-                        f"🗓  *Earliest Available:* `{earliest_text}`  \n"
-                        f"🔗 https://schengenappointments.com/in/{CITY_SLUG}/{VISA_TYPE}"
-                    )
-                    send_telegram(message)
-                last_state[TARGET_COUNTRY] = earliest_text
-                save_last_state(last_state)
-            break
-
-    if not found_country:
-        raise RuntimeError(f"Country '{TARGET_COUNTRY}' not found in rendered HTML")
-
-if __name__ == "__main__":
-    try:
-        check_slot()
-    except Exception as e:
-        print(f"[Error] {e}")
-        exit(1)
+            # Extract the earliest-available date f
