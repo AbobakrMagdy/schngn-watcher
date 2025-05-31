@@ -1,11 +1,16 @@
-name: "Hello World Test"
+name: Test
 
 on:
-  workflow_dispatch:
-
+  release:
+    types: [created]
+  workflow_dispatch: # Put here!!
+  
 jobs:
-  say_hello:
+  build:
     runs-on: ubuntu-latest
+
     steps:
-      - name: Print Hello
-        run: echo "Hello, GitHub Actions is working!"
+      - uses: actions/checkout@v2
+
+      - name: Run a one-line script
+        run: echo Hello, world!
