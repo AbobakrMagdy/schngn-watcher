@@ -44,24 +44,23 @@ jobs:
       - name: Render Schengen appointments HTML
         run: |
           node << 'EOF'
-const { chromium } = require('playwright');
+          const { chromium } = require('playwright');
 
-(async () => {
-  const browser = await chromium.launch({ headless: true });
-  const page = await browser.newPage();
-  await page.goto(
-    `https://schengenappointments.com/in/${process.env.CITY_SLUG}/${process.env.VISA_TYPE}`,
-    { timeout: 60000 }
-  );
-  // Wait for at least one <tr> in the table body
-  await page.waitForSelector('tbody tr', { timeout: 60000 });
-  const html = await page.content();
-  const fs = require('fs');
-  fs.writeFileSync('rendered.html', html, 'utf-8');
-  await browser.close();
-})();
-EOF
-
+          (async () => {
+            const browser = await chromium.launch({ headless: true });
+            const page = await browser.newPage();
+            await page.goto(
+              `https://schengenappointments.com/in/${process.env.CITY_SLUG}/${process.env.VISA_TYPE}`,
+              { timeout: 60000 }
+            );
+            // Wait for at least one <tr> inside <tbody>
+            await page.waitForSelector('tbody tr', { timeout: 60000 });
+            const html = await page.content();
+            const fs = require('fs');
+            fs.writeFileSync('rendered.html', html, 'utf-8');
+            await browser.close();
+          })();
+          EOF
         env:
           CITY_SLUG: "dubai"
           VISA_TYPE: "tourism"
@@ -74,7 +73,7 @@ EOF
           head -n 40 rendered.html
           echo "------ END rendered.html ------"
 
-      # 8. Run the Python slot checker (which reads rendered.html if present)
+      # 8. Run the Python checker (which reads rendered.html if present)
       - name: Run Schengen slot checker
         env:
           CITY_SLUG:      "dubai"
