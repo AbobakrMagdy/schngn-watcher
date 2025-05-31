@@ -4,18 +4,18 @@ import json
 import requests
 from bs4 import BeautifulSoup
 
-# ─── DEBUGGING: Marker so we know this is the correct updated script ─────────────
+# ─── DEBUGGING: Marker so we know this is the updated script ───────────────
 print("### DEBUG: check_schengen.py is running the updated version! ###")
-# ──────────────────────────────────────────────────────────────────────────────────
+# ──────────────────────────────────────────────────────────────────────────────
 
-# ─── CONFIGURATION via environment variables ────────────────────────────────────
+# ─── CONFIGURATION via environment variables ──────────────────────────────────
 CITY_SLUG      = os.getenv("CITY_SLUG", "dubai")
 VISA_TYPE      = os.getenv("VISA_TYPE", "tourism")
 TARGET_COUNTRY = os.getenv("TARGET_COUNTRY", "Luxembourg")
 TELEGRAM_TOKEN = os.getenv("TELEGRAM_TOKEN", "")
 CHAT_ID        = os.getenv("CHAT_ID", "")
 STATE_FILE     = os.getenv("STATE_FILE", os.path.expanduser("last_state.json"))
-# ────────────────────────────────────────────────────────────────────────────────
+# ───────────────────────────────────────────────────────────────────────────────
 
 def load_last_state():
     if not os.path.exists(STATE_FILE):
@@ -83,23 +83,21 @@ def check_slot():
     print(f"### DEBUG: Found {len(all_rows)} <tr> rows in the rendered HTML ###")
     # ────────────────────────────────────────────────────────────────────────────────
 
-    # ─── DEBUG: Print out every country_raw and country_norm ──────────────────────
-    print("### DEBUG: Listing all parsed country names (raw → normalized) ###")
+    # ─── DEBUG: Print out every row's <td> contents as a list ───────────────────
+    print("### DEBUG: Listing all <tr> rows with their <td> cell texts ###")
     for idx, row in enumerate(all_rows, start=1):
         cells = row.find_all("td")
-        if len(cells) >= 1:
-            country_raw = cells[0].get_text(strip=True)
-            country_norm = normalize_country_name(country_raw)
-            print(f"Row {idx:>2}: RAW = '{country_raw}' → NORM = '{country_norm}'")
-        else:
-            print(f"Row {idx:>2}: <no TD cells>")
-    print("### DEBUG: End of country list ###")
+        # Extract the visible text from each <td>, stripping whitespace/newlines
+        cell_texts = [cell.get_text(strip=True) for cell in cells]
+        print(f"Row {idx:>2}: cells={cell_texts}")
+    print("### DEBUG: End of <tr> list ###")
     # ────────────────────────────────────────────────────────────────────────────────
 
     last_state = load_last_state()
     prev_value = last_state.get(TARGET_COUNTRY, "")
 
     found_country = False
+    # Attempt to match on the first column (index 0). If needed, change to another index.
     for row in all_rows:
         cells = row.find_all("td")
         if len(cells) < 2:
