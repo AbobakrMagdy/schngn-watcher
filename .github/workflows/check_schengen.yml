@@ -40,17 +40,59 @@ jobs:
           npm install playwright
           npx playwright install
 
-      # 6. Render the page with Playwright
+      # 6. Render the page with Playwright and save to rendered.html
       - name: Render Schengen appointments HTML
         run: |
           node << 'EOF'
-          const { chromium } = require('playwright');
-          (async () => {
-            const browser = await chromium.launch({ headless: true });
-            const page = await browser.newPage();
-            await page.goto(
-              `https://schengenappointments.com/in/${process.env.CITY_SLUG}/${process.env.VISA_TYPE}`,
-              { timeout: 60000 }
-            );
-            // Wait for at least one table row to appear
-            aw
+const { chromium } = require('playwright');
+
+(async () => {
+  const browser = await chromium.launch({ headless: true });
+  const page = await browser.newPage();
+  await page.goto(
+    `https://schengenappointments.com/in/${process.env.CITY_SLUG}/${process.env.VISA_TYPE}`,
+    { timeout: 60000 }
+  );
+  // Wait for at least one <tr> in the table body
+  await page.waitForSelector('tbody tr', { timeout: 60000 });
+  const html = await page.content();
+  const fs = require('fs');
+  fs.writeFileSync('rendered.html', html, 'utf-8');
+  await browser.close();
+})();
+EOF
+
+        env:
+          CITY_SLUG: "dubai"
+          VISA_TYPE: "tourism"
+
+      # 7. (Optional) Show rendered.html for debugging
+      - name: Debug  Show rendered HTML snippet
+        if: always()
+        run: |
+          echo "----- BEGIN rendered.html (lines 1–40) -----"
+          head -n 40 rendered.html
+          echo "------ END rendered.html ------"
+
+      # 8. Run the Python slot checker (which reads rendered.html if present)
+      - name: Run Schengen slot checker
+        env:
+          CITY_SLUG:      "dubai"
+          VISA_TYPE:      "tourism"
+          TARGET_COUNTRY: "Luxembourg"
+          TELEGRAM_TOKEN: ${{ secrets.TELEGRAM_TOKEN }}
+          CHAT_ID:        ${{ secrets.CHAT_ID }}
+          STATE_FILE:     "last_state.json"
+        run: |
+          python check_schengen.py
+
+      # 9. Commit last_state.json back if it changed
+      - name: Commit updated state.json if needed
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add last_state.json
+          git diff --cached --quiet || git commit -m "Update last_state.json"
+          git push origin HEAD:main
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
