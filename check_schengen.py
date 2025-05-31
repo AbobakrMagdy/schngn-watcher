@@ -1,140 +1,102 @@
-#!/usr/bin/env python3
-import os
-import json
-import requests
-from bs4 import BeautifulSoup
+# .github/workflows/check_schengen.yml
 
-# ─── DEBUGGING: Marker so we know this is the updated script ────────────────
-print("### DEBUG: check_schengen.py is running the updated version! ###")
-# ─────────────────────────────────────────────────────────────────────────────
+name: "Schengen Slot Watcher"
 
-# ─── CONFIGURATION via environment variables ─────────────────────────────────
-CITY_SLUG      = os.getenv("CITY_SLUG", "dubai")
-VISA_TYPE      = os.getenv("VISA_TYPE", "tourism")
-TARGET_COUNTRY = os.getenv("TARGET_COUNTRY", "Cyprus")
-TELEGRAM_TOKEN = os.getenv("TELEGRAM_TOKEN", "")
-CHAT_ID        = os.getenv("CHAT_ID", "")
-STATE_FILE     = os.getenv("STATE_FILE", os.path.expanduser("last_state.json"))
-# ─────────────────────────────────────────────────────────────────────────────
+on:
+  schedule:
+    - cron: "*/5 * * * *"      # run every 5 minutes
+  workflow_dispatch:           # allow manual trigger
 
-def load_last_state():
-    if not os.path.exists(STATE_FILE):
-        return {}
-    try:
-        with open(STATE_FILE, "r") as f:
-            return json.load(f)
-    except Exception:
-        return {}
+jobs:
+  watch_slots:
+    runs-on: ubuntu-latest
 
-def save_last_state(state: dict):
-    os.makedirs(os.path.dirname(STATE_FILE) or ".", exist_ok=True)
-    with open(STATE_FILE, "w") as f:
-        json.dump(state, f)
+    steps:
+      # 1) Checkout the repository
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: true   # needed for pushing last_state.json
 
-def send_telegram(text: str):
-    if not TELEGRAM_TOKEN or not CHAT_ID:
-        raise RuntimeError("Missing TELEGRAM_TOKEN or CHAT_ID environment variable")
-    url = f"https://api.telegram.org/bot{TELEGRAM_TOKEN}/sendMessage"
-    payload = {
-        "chat_id": CHAT_ID,
-        "text": text,
-        "parse_mode": "MarkdownV2",
-    }
-    resp = requests.post(url, data=payload, timeout=10)
-    resp.raise_for_status()
+      # 2) Set up Python and install pip dependencies
+      - name: Set up Python & Install dependencies
+        uses: actions/setup-python@v4
+        with:
+          python-version: "3.x"
+      - name: Install Python dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install requests beautifulsoup4
 
-def normalize_country_name(raw_name: str) -> str:
-    """
-    Strip out any non-letter characters (e.g., emojis, punctuation) from raw_name,
-    returning only letters (A–Z, a–z) and spaces.
-    Example: "Cyprus 🇨🇾" → "Cyprus"
-    """
-    return "".join(ch for ch in raw_name if ch.isalpha() or ch.isspace()).strip()
+      # 3) Set up Node.js (needed for Playwright)
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "18"
 
-def get_soup():
-    """
-    If 'rendered.html' (produced by Playwright) exists, parse that.
-    Otherwise, do a normal HTTP GET (useful for local testing).
-    """
-    if os.path.exists("rendered.html"):
-        print("### DEBUG: using rendered.html instead of HTTP GET ###")
-        with open("rendered.html", "r", encoding="utf-8") as f:
-            html = f.read()
-    else:
-        print("### DEBUG: performing HTTP GET to fetch HTML ###")
-        url = f"https://schengenappointments.com/in/{CITY_SLUG}/{VISA_TYPE}"
-        headers = {
-            "User-Agent": (
-                "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
-                "AppleWebKit/537.36 (KHTML, like Gecko) Chrome/114.0.0.0 Safari/537.36"
-            )
-        }
-        resp = requests.get(url, headers=headers, timeout=30)
-        resp.raise_for_status()
-        html = resp.text
+      # 4) Install Playwright and all required system dependencies
+      - name: Install Playwright + Browsers (with deps)
+        run: |
+          npm install playwright
+          npx playwright install --with-deps
 
-    return BeautifulSoup(html, "html.parser")
+      # 5) Render the live page (with JavaScript) into rendered.html
+      - name: Render Schengen appointments HTML
+        run: |
+          node << 'EOF'
+          const { chromium } = require('playwright');
+          (async () => {
+            const browser = await chromium.launch({ headless: true });
+            const page = await browser.newPage();
+            // Navigate to the live site using CITY_SLUG and VISA_TYPE
+            await page.goto(
+              `https://schengenappointments.com/in/${process.env.CITY_SLUG}/${process.env.VISA_TYPE}`,
+              { timeout: 60000 }
+            );
+            // Wait until at least one <tr> appears inside the <tbody>
+            await page.waitForSelector('tbody tr', { timeout: 60000 });
+            // Grab the fully-rendered HTML and write to rendered.html
+            const html = await page.content();
+            const fs = require('fs');
+            fs.writeFileSync('rendered.html', html, 'utf-8');
+            await browser.close();
+          })();
+          EOF
+        env:
+          CITY_SLUG: "dubai"
+          VISA_TYPE: "tourism"
 
-def check_slot():
-    soup = get_soup()
+      # 6) (Optional) Show first 40 lines of rendered.html for debugging
+      - name: Debug: Show rendered HTML snippet
+        if: always()
+        run: |
+          echo "----- BEGIN rendered.html (lines 1–40) -----"
+          head -n 40 rendered.html
+          echo "------ END rendered.html ------"
 
-    # ─── DEBUG: Collect all <tr> rows ───────────────────────────────────────────
-    all_rows = soup.find_all("tr")
-    print(f"### DEBUG: Found {len(all_rows)} <tr> rows in the rendered HTML ###")
-    # ──────────────────────────────────────────────────────────────────────────────
+      # 7) Run the Python slot checker (which uses rendered.html if present)
+      - name: Run Schengen slot checker
+        env:
+          CITY_SLUG:      "dubai"
+          VISA_TYPE:      "tourism"
+          TARGET_COUNTRY: "Cyprus"
+          TELEGRAM_TOKEN: ${{ secrets.TELEGRAM_TOKEN }}
+          CHAT_ID:        ${{ secrets.CHAT_ID }}
+          STATE_FILE:     "last_state.json"
+        run: |
+          python check_schengen.py
 
-    # ─── DEBUG: Print all normalized country names from <th> ────────────────────
-    print("### DEBUG: Listing all normalized country names from <th> ###")
-    for idx, row in enumerate(all_rows, start=1):
-        th = row.find("th")
-        if th:
-            country_raw = th.get_text(strip=True)
-            country_norm = normalize_country_name(country_raw)
-            print(f"Row {idx:>2}: RAW-TH = '{country_raw}' → NORM = '{country_norm}'")
-        else:
-            print(f"Row {idx:>2}: <no <th> in this row>")
-    print("### DEBUG: End of country list ###")
-    # ──────────────────────────────────────────────────────────────────────────────
-
-    last_state = load_last_state()
-    prev_value = last_state.get(TARGET_COUNTRY, "")
-
-    # Now search for the specific country in the <th> cells
-    found_country = False
-    for row in all_rows:
-        th = row.find("th")
-        if not th:
-            continue
-
-        country_raw = th.get_text(strip=True)
-        country_norm = normalize_country_name(country_raw)
-
-        if country_norm.lower() == TARGET_COUNTRY.lower():
-            found_country = True
-
-            # The earliest‐available date is in the first <span class="font-bold"> inside a <td> sibling
-            span = row.find("span", class_="font-bold")
-            earliest_text = span.get_text(strip=True) if span else ""
-
-            if earliest_text != prev_value:
-                # Only notify if it's not empty/No availability/Waitlist Open
-                if earliest_text and earliest_text not in ("No availability", "Waitlist Open"):
-                    message = (
-                        f"🎉 *{TARGET_COUNTRY}* slot opened in *{CITY_SLUG.title()}*!  \n"
-                        f"🗓  *Earliest Available:* `{earliest_text}`  \n"
-                        f"🔗 https://schengenappointments.com/in/{CITY_SLUG}/{VISA_TYPE}"
-                    )
-                    send_telegram(message)
-                last_state[TARGET_COUNTRY] = earliest_text
-                save_last_state(last_state)
-            break
-
-    if not found_country:
-        raise RuntimeError(f"Country '{TARGET_COUNTRY}' not found in rendered HTML")
-
-if __name__ == "__main__":
-    try:
-        check_slot()
-    except Exception as e:
-        print(f"[Error] {e}")
-        exit(1)
+      # 8) Only commit last_state.json if it exists and has changed
+      - name: Commit updated state.json if needed
+        run: |
+          if [ -f last_state.json ]; then
+            git config user.name "github-actions[bot]"
+            git config user.email "github-actions[bot]@users.noreply.github.com"
+            git add last_state.json
+            git diff --cached --quiet || git commit -m "Update last_state.json"
+            git push origin HEAD:main
+          else
+            echo "No last_state.json to commit."
+          fi
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
