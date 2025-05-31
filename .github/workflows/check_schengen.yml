@@ -28,15 +28,19 @@ jobs:
           python -m pip install --upgrade pip
           pip install requests beautifulsoup4
 
-      # ─── 4. Set up Node.js & Playwright ────────────────────────────────────
-      - name: Install Node.js and Playwright
+      # ─── 4. Set up Node.js ───────────────────────────────────────────────────
+      - name: Set up Node.js
         uses: actions/setup-node@v4
         with:
           node-version: "18"
-      - name: Install Playwright
-        run: npm install playwright
 
-      # ─── 5. Render the page with Playwright and save to rendered.html ──────
+      # ─── 5. Install Playwright and its browsers ────────────────────────────
+      - name: Install Playwright + Browsers
+        run: |
+          npm install playwright
+          npx playwright install
+
+      # ─── 6. Render the page with Playwright and save to rendered.html ──────
       - name: Render Schengen appointments HTML
         run: |
           node << 'EOF'
@@ -46,9 +50,7 @@ jobs:
             const page = await browser.newPage();
             await page.goto(`https://schengenappointments.com/in/${process.env.CITY_SLUG}/${process.env.VISA_TYPE}`, { timeout: 60000 });
             // Wait until at least one <tr> appears in the table body.
-            // Adjust selector if necessary (e.g. wait for a specific country row or a table id)
             await page.waitForSelector('tbody tr', { timeout: 60000 });
-            // Dump the fully rendered HTML to a file:
             const html = await page.content();
             const fs = require('fs');
             fs.writeFileSync('rendered.html', html, 'utf-8');
@@ -59,15 +61,15 @@ jobs:
           CITY_SLUG: "dubai"
           VISA_TYPE: "tourism"
 
-      # ─── 6. (Optional) Show first 20 lines of rendered.html for debugging ───
-      - name: Debug Show rendered HTML snippet
+      # ─── 7. (Optional) Show first 40 lines of rendered.html for debugging ────
+      - name: Debug  Show rendered HTML snippet
         if: always()
         run: |
-          echo "----- BEGIN rendered.html (lines 1-40) -----"
+          echo "----- BEGIN rendered.html (lines 1–40) -----"
           head -n 40 rendered.html
           echo "------ END rendered.html ------"
 
-      # ─── 7. Run the slot checker script ───────────────────────────────────
+      # ─── 8. Run the slot checker script ───────────────────────────────────
       - name: Run Schengen slot checker
         env:
           CITY_SLUG:      "dubai"
@@ -79,7 +81,7 @@ jobs:
         run: |
           python check_schengen.py
 
-      # ─── 8. Commit updated state.json if needed ───────────────────────────
+      # ─── 9. Commit updated state.json if needed ───────────────────────────
       - name: Commit updated state.json if needed
         run: |
           git config user.name "github-actions[bot]"
