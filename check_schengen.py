@@ -11,7 +11,7 @@ print("### DEBUG: check_schengen.py is running the updated version! ###")
 # ─── CONFIGURATION (from environment) ────────────────────────────────────────────
 CITY_SLUG      = os.getenv("CITY_SLUG", "dubai")
 VISA_TYPE      = os.getenv("VISA_TYPE", "tourism")
-TARGET_COUNTRY = os.getenv("TARGET_COUNTRY", "Luxembourg")
+TARGET_COUNTRY = os.getenv("TARGET_COUNTRY", "Cyprus")
 TELEGRAM_TOKEN = os.getenv("TELEGRAM_TOKEN", "")
 CHAT_ID        = os.getenv("CHAT_ID", "")
 STATE_FILE     = os.getenv("STATE_FILE", os.path.expanduser("last_state.json"))
