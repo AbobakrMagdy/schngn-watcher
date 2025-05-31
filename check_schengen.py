@@ -4,6 +4,10 @@ import json
 import requests
 from bs4 import BeautifulSoup
 
+# ─── DEBUGGING: Signal that this file is the new version ──────────────────────
+print("### DEBUG: check_schengen.py is running the updated version! ###")
+# ────────────────────────────────────────────────────────────────────────────────
+
 # ─── CONFIGURATION ────────────────────────────────────────────────────────────────
 CITY_SLUG      = os.getenv("CITY_SLUG", "dubai")
 VISA_TYPE      = os.getenv("VISA_TYPE", "tourism")
