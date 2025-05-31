@@ -60,7 +60,7 @@ jobs:
           VISA_TYPE: "tourism"
 
       # ─── 6. (Optional) Show first 20 lines of rendered.html for debugging ───
-      - name: Debug: Show rendered HTML snippet
+      - name: Debug Show rendered HTML snippet
         if: always()
         run: |
           echo "----- BEGIN rendered.html (lines 1-40) -----"
