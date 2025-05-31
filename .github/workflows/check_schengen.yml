@@ -10,51 +10,52 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      # 1. Checkout repository
+      # 1) Checkout the repository so we have both check_schengen.py and rendered.html
       - name: Checkout repository
         uses: actions/checkout@v4
         with:
           persist-credentials: true
 
-      # 2. Set up Python
+      # 2) Set up a Python environment for our script
       - name: Set up Python
         uses: actions/setup-python@v4
         with:
           python-version: "3.x"
 
-      # 3. Install Python dependencies
+      # 3) Install the Python packages we need (requests, BeautifulSoup)
       - name: Install Python dependencies
         run: |
           python -m pip install --upgrade pip
           pip install requests beautifulsoup4
 
-      # 4. Set up Node.js
+      # 4) Install Node.js (for Playwright)
       - name: Set up Node.js
         uses: actions/setup-node@v4
         with:
           node-version: "18"
 
-      # 5. Install Playwright + Browsers
+      # 5) Install Playwright and download the browser binaries
       - name: Install Playwright + Browsers
         run: |
           npm install playwright
           npx playwright install
 
-      # 6. Render the page with Playwright and save to rendered.html
+      # 6) Use Playwright to open the live page (with JavaScript), wait for <tbody><tr>, and write out rendered.html
       - name: Render Schengen appointments HTML
         run: |
           node << 'EOF'
           const { chromium } = require('playwright');
-
           (async () => {
             const browser = await chromium.launch({ headless: true });
             const page = await browser.newPage();
+            // Go to the live site using our CITY_SLUG/VISA_TYPE
             await page.goto(
               `https://schengenappointments.com/in/${process.env.CITY_SLUG}/${process.env.VISA_TYPE}`,
               { timeout: 60000 }
             );
-            // Wait for at least one <tr> inside <tbody>
+            // Wait until at least one <tr> appears inside the <tbody>
             await page.waitForSelector('tbody tr', { timeout: 60000 });
+            // Grab the fully-rendered HTML
             const html = await page.content();
             const fs = require('fs');
             fs.writeFileSync('rendered.html', html, 'utf-8');
@@ -65,15 +66,15 @@ jobs:
           CITY_SLUG: "dubai"
           VISA_TYPE: "tourism"
 
-      # 7. (Optional) Show rendered.html for debugging
-      - name: Debug Show rendered HTML snippet
+      # 7) (Optional) Show the first 40 lines of rendered.html so we can confirm it really has a table
+      - name: Debug  Show rendered HTML snippet
         if: always()
         run: |
           echo "----- BEGIN rendered.html (lines 1–40) -----"
           head -n 40 rendered.html
           echo "------ END rendered.html ------"
 
-      # 8. Run the Python checker (which reads rendered.html if present)
+      # 8) Run our Python script (which will now parse rendered.html instead of doing requests.get())
       - name: Run Schengen slot checker
         env:
           CITY_SLUG:      "dubai"
@@ -85,7 +86,7 @@ jobs:
         run: |
           python check_schengen.py
 
-      # 9. Commit last_state.json back if it changed
+      # 9) If last_state.json changed, commit & push it back
       - name: Commit updated state.json if needed
         run: |
           git config user.name "github-actions[bot]"
