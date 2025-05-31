@@ -11,7 +11,7 @@ print("### DEBUG: check_schengen.py (uncapped notifications) is running the upda
 # ─── CONFIGURATION via environment variables ──────────────────────────────────
 CITY_SLUG      = os.getenv("CITY_SLUG", "dubai")
 VISA_TYPE      = os.getenv("VISA_TYPE", "tourism")
-TARGET_COUNTRY = os.getenv("TARGET_COUNTRY", "Cyprus")
+TARGET_COUNTRY = os.getenv("TARGET_COUNTRY", "Italy")
 TELEGRAM_TOKEN = os.getenv("TELEGRAM_TOKEN", "")
 CHAT_ID        = os.getenv("CHAT_ID", "")
 # We no longer care about STATE_FILE for capping; set it anyway for backward compatibility
