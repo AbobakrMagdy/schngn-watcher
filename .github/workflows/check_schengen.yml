@@ -1,0 +1,63 @@
+name: "Schengen Slot Watcher"
+
+# 1) Schedule: run every 5 minutes (*/5 * * * *). 
+#    GitHub Actions imposes a minimum 5-minute interval.
+# 2) Also allow manual “Run workflow” on demand.
+on:
+  schedule:
+    - cron: "*/5 * * * *"
+  workflow_dispatch:
+
+jobs:
+  watch_slots:
+    runs-on: ubuntu-latest
+
+    steps:
+      # ─── 1. Check out the code ───────────────────────────────────────────
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          # We need push permission so we can commit last_state.json back
+          persist-credentials: true
+
+      # ─── 2. Set up Python 3.x ─────────────────────────────────────────
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: "3.x"
+
+      # ─── 3. Install dependencies ─────────────────────────────────────
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install requests beautifulsoup4
+
+      # ─── 4. Run the slot checker ─────────────────────────────────────
+      - name: Run Schengen slot checker
+        env:
+          # If you want a different city, visa, or country, override here:
+          CITY_SLUG:      "dubai"
+          VISA_TYPE:      "tourism"
+          TARGET_COUNTRY: "Luxembourg"
+
+          TELEGRAM_TOKEN: ${{ secrets.TELEGRAM_TOKEN }}
+          CHAT_ID:        ${{ secrets.CHAT_ID }}
+
+          # Save state to this path
+          STATE_FILE:     "last_state.json"
+        run: |
+          python check_schengen.py
+
+      # ─── 5. Commit updated last_state.json (if changed) ──────────────
+      - name: Commit updated state.json if needed
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add last_state.json
+          # only commit & push if there’s a change
+          git diff --cached --quiet || git commit -m "Update last_state.json"
+          git push origin HEAD:main
+        env:
+          # This token is automatically provided by GitHub Actions and allows pushing
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
