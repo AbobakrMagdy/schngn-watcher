@@ -1,6 +1,6 @@
 name: "Schengen Slot Watcher"
 
-# Run every 5 minutes (GitHub Actions minimum) + allow manual dispatch
+# Schedule to run every 5 minutes (GitHub's minimum) plus allow manual dispatch.
 on:
   schedule:
     - cron: "*/5 * * * *"
@@ -11,49 +11,51 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      # 1) Checkout the repository so we have access to check_schengen.py
+      # ─── 1. Checkout the repository ────────────────────────────────────────
       - name: Checkout repository
         uses: actions/checkout@v4
         with:
+          # We need push permission so we can commit last_state.json back to main
           persist-credentials: true
 
-      # 2) Set up Python 3.x
+      # ─── 2. Set up Python 3.x ─────────────────────────────────────────────
       - name: Set up Python
         uses: actions/setup-python@v4
         with:
           python-version: "3.x"
 
-      # 3) Install required Python packages
+      # ─── 3. Install required Python packages ─────────────────────────────
       - name: Install dependencies
         run: |
           python -m pip install --upgrade pip
           pip install requests beautifulsoup4
 
-      # 4) Run the slot checker script
+      # ─── 4. Run the slot checker script ──────────────────────────────────
       - name: Run Schengen slot checker
         env:
-          # Override these if you want a different country/city/visa
+          # Override these if you want to monitor a different city/country/visa
           CITY_SLUG:      "dubai"
           VISA_TYPE:      "tourism"
           TARGET_COUNTRY: "Luxembourg"
 
-          # Required GitHub Secrets for Telegram notifications
+          # These two must be added as GitHub Secrets in your repo settings
           TELEGRAM_TOKEN: ${{ secrets.TELEGRAM_TOKEN }}
           CHAT_ID:        ${{ secrets.CHAT_ID }}
 
-          # Where the script reads/writes its state file
+          # The script reads/writes its state file here
           STATE_FILE:     "last_state.json"
         run: |
           python check_schengen.py
 
-      # 5) If last_state.json changed, commit & push it back to main
-      - name: Commit updated state.json if needed
+      # ─── 5. Commit updated last_state.json back to main if it changed ──
+      - name: Commit updated last_state.json if needed
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
           git add last_state.json
+          # If there is any diff staged, commit & push
           git diff --cached --quiet || git commit -m "Update last_state.json"
           git push origin HEAD:main
         env:
-          # This built-in token allows the workflow to push commits back
+          # GITHUB_TOKEN is automatically available; it allows pushing commits
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
