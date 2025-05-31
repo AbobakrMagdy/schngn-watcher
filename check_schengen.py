@@ -15,7 +15,7 @@ TARGET_COUNTRY = os.getenv("TARGET_COUNTRY", "Luxembourg")
 TELEGRAM_TOKEN = os.getenv("TELEGRAM_TOKEN", "")
 CHAT_ID        = os.getenv("CHAT_ID", "")
 STATE_FILE     = os.getenv("STATE_FILE", os.path.expanduser("last_state.json"))
-# ──────────────────────────────────────────────────────────────────────────────────
+# ────────────────────────────────────────────────────────────────────────────────
 
 def load_last_state():
     if not os.path.exists(STATE_FILE):
@@ -78,10 +78,23 @@ def get_soup():
 def check_slot():
     soup = get_soup()
 
-    # ─── DEBUG: Count how many <tr> rows are present ──────────────────────────
+    # ─── DEBUG: Collect all <tr> rows ─────────────────────────────────────────────
     all_rows = soup.find_all("tr")
     print(f"### DEBUG: Found {len(all_rows)} <tr> rows in the rendered HTML ###")
-    # ────────────────────────────────────────────────────────────────────────────
+    # ────────────────────────────────────────────────────────────────────────────────
+
+    # ─── DEBUG: Print out every country_raw and country_norm ──────────────────────
+    print("### DEBUG: Listing all parsed country names (raw → normalized) ###")
+    for idx, row in enumerate(all_rows, start=1):
+        cells = row.find_all("td")
+        if len(cells) >= 1:
+            country_raw = cells[0].get_text(strip=True)
+            country_norm = normalize_country_name(country_raw)
+            print(f"Row {idx:>2}: RAW = '{country_raw}' → NORM = '{country_norm}'")
+        else:
+            print(f"Row {idx:>2}: <no TD cells>")
+    print("### DEBUG: End of country list ###")
+    # ────────────────────────────────────────────────────────────────────────────────
 
     last_state = load_last_state()
     prev_value = last_state.get(TARGET_COUNTRY, "")
@@ -92,9 +105,8 @@ def check_slot():
         if len(cells) < 2:
             continue
 
-        country_raw = cells[0].get_text(strip=True)  
-        country_norm = normalize_country_name(country_raw)  
-        # Now country_norm is stripped of emojis/punctuation, e.g. "Luxembourg"
+        country_raw = cells[0].get_text(strip=True)
+        country_norm = normalize_country_name(country_raw)
 
         if country_norm.lower() == TARGET_COUNTRY.lower():
             found_country = True
