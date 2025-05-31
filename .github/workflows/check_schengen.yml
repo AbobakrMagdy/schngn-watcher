@@ -1,7 +1,6 @@
 name: "Schengen Slot Watcher"
 
 on:
-  # Run every 5 minutes, plus allow manual dispatch
   schedule:
     - cron: "*/5 * * * *"
   workflow_dispatch:
@@ -23,7 +22,6 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
         with:
-          # We need permission to push commits
           persist-credentials: true
 
       # ─── 2. Set up Python ───────────────────────────────────────────────────
@@ -43,28 +41,4 @@ jobs:
         run: |
           echo "------ BEGIN check_schengen.py (lines 1–20) ------"
           sed -n '1,20p' check_schengen.py
-          echo "------- END check_schengen.py -------"
-
-      # ─── 5. Run the slot checker script ───────────────────────────────────
-      - name: Run Schengen slot checker
-        env:
-          CITY_SLUG:      "dubai"
-          VISA_TYPE:      "tourism"
-          TARGET_COUNTRY: "Luxembourg"
-          TELEGRAM_TOKEN: ${{ secrets.TELEGRAM_TOKEN }}
-          CHAT_ID:        ${{ secrets.CHAT_ID }}
-          STATE_FILE:     "last_state.json"
-        run: |
-          python check_schengen.py
-
-      # ─── 6. Commit updated state.json if needed ───────────────────────────
-      - name: Commit updated state.json if needed
-        run: |
-          git config user.name "github-actions[bot]"
-          git config user.email "github-actions[bot]@users.noreply.github.com"
-          git add last_state.json
-          git diff --cached --quiet || git commit -m "Update last_state.json"
-          git push origin HEAD:main
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-
+          echo "------- END check_sc_
