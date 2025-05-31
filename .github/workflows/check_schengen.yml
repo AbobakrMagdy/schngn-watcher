@@ -1,25 +1,23 @@
-# .github/workflows/check_schengen.yml
-
 name: "Schengen Slot Watcher"
 
 on:
   schedule:
-    - cron: "*/5 * * * *"      # every 5 minutes
-  workflow_dispatch:           # manual trigger
+    - cron: "*/5 * * * *"      # run every 5 minutes
+  workflow_dispatch:
 
 jobs:
   watch_slots:
     runs-on: ubuntu-latest
 
     steps:
-      # 1) Check out the repo (so we have check_schengen.py)
+      # 1) Checkout the repository
       - name: Checkout repository
         uses: actions/checkout@v4
         with:
-          persist-credentials: true   # so we can push last_state.json back
+          persist-credentials: true   # needed for the final “push” step
 
-      # 2) Install Python & pip packages
-      - name: Set up Python & install deps
+      # 2) Set up Python and install pip dependencies
+      - name: Set up Python & Install dependencies
         uses: actions/setup-python@v4
         with:
           python-version: "3.x"
@@ -28,18 +26,18 @@ jobs:
           python -m pip install --upgrade pip
           pip install requests beautifulsoup4
 
-      # 3) Install Node.js (needed for Playwright)
+      # 3) Set up Node.js (needed for Playwright)
       - name: Set up Node.js
         uses: actions/setup-node@v4
         with:
           node-version: "18"
 
-      # 4) Use the official Playwright Action to install browsers automatically
-      - name: Install Playwright browsers
-        uses: microsoft/playwright-github-action@v1
-        with:
-          # By default, this will install Chromium, WebKit, and Firefox for Playwright
-          playwright-version: "1.37.1"  # you can pin to the latest or a specific version
+      # 4) Install Playwright and all system dependencies
+      - name: Install Playwright + Browsers (with deps)
+        run: |
+          npm install playwright
+          # The --with-deps flag installs required apt packages too
+          npx playwright install --with-deps
 
       # 5) Render the live page (with JavaScript) into rendered.html
       - name: Render Schengen appointments HTML
@@ -49,12 +47,12 @@ jobs:
           (async () => {
             const browser = await chromium.launch({ headless: true });
             const page = await browser.newPage();
-            // Go to the live site:
+            // Navigate to the live site (City slug + Visa type)
             await page.goto(
               `https://schengenappointments.com/in/${process.env.CITY_SLUG}/${process.env.VISA_TYPE}`,
               { timeout: 60000 }
             );
-            // Wait until at least one table row appears:
+            // Wait until at least one <tr> appears inside the <tbody>
             await page.waitForSelector('tbody tr', { timeout: 60000 });
             const html = await page.content();
             const fs = require('fs');
@@ -66,15 +64,15 @@ jobs:
           CITY_SLUG: "dubai"
           VISA_TYPE: "tourism"
 
-      # 6) (Optional) Peek at rendered.html to verify it actually contains table rows
+      # 6) (Optional) Show first lines of rendered.html for debugging
       - name: Debug  Show rendered HTML snippet
         if: always()
         run: |
-          echo "----- FIRST 40 LINES OF rendered.html -----"
+          echo "----- BEGIN rendered.html (lines 1–40) -----"
           head -n 40 rendered.html
-          echo "------ END SNIPPET ------"
+          echo "------ END rendered.html ------"
 
-      # 7) Run the Python script, which now reads rendered.html instead of doing requests.get()
+      # 7) Run the Python checker (which now parses rendered.html)
       - name: Run Schengen slot checker
         env:
           CITY_SLUG:      "dubai"
