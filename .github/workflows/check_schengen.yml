@@ -79,7 +79,7 @@ jobs:
         env:
           CITY_SLUG:      ${{ matrix.city }}
           VISA_TYPE:      "tourism"
-          TARGET_COUNTRY: "Italy"
+          TARGET_COUNTRY: "Switzerland"
           TELEGRAM_TOKEN: ${{ secrets.TELEGRAM_TOKEN }}
           CHAT_ID:        ${{ secrets.CHAT_ID }}
           STATE_FILE:     "last_state_${{ matrix.city }}.json"
