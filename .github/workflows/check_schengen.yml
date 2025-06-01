@@ -66,8 +66,8 @@ jobs:
           CITY_SLUG: ${{ matrix.city }}
           VISA_TYPE: "tourism"
 
-      # 6) (Optional) Debug: show the first 40 lines of rendered_<city>.html
-      - name: Debug: Show rendered_${{ matrix.city }}.html snippet
+      # 6) (Optional) Debug Show rendered_<city>.html snippet
+      - name: Debug Show rendered_${{ matrix.city }}.html snippet
         if: always()
         run: |
           echo "----- BEGIN rendered_${{ matrix.city }}.html (lines 1–40) -----"
