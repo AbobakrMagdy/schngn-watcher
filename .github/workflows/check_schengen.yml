@@ -1,12 +1,14 @@
 name: "Schengen Slot Watcher (Multi-Country)"
 
+# Grant write permission so GITHUB_TOKEN can push last_state files into a private repo
 permissions:
   contents: write
 
 on:
   schedule:
-    - cron: "*/45 * * * *"   # every 45 minutes
-  workflow_dispatch:
+    # Every 45 minutes
+    - cron: "*/45 * * * *"
+  workflow_dispatch:        # allow manual/manual runs
 
 jobs:
   watch_slots:
@@ -17,13 +19,81 @@ jobs:
         city: ["dubai", "abu-dhabi"]
 
     steps:
+      # 1) Checkout the repository with full history so pulls and rebases work
       - name: Checkout repository
         uses: actions/checkout@v4
         with:
           persist-credentials: true
           fetch-depth: 0
 
-      # … steps 2–7 unchanged …
+      # 2) Set up Python and install pip dependencies
+      - name: Set up Python & Install Python deps
+        uses: actions/setup-python@v4
+        with:
+          python-version: "3.x"
+      - name: Install Python dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install requests beautifulsoup4
+
+      # 3) Set up Node.js (for Playwright)
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "18"
+
+      # 4) Install Playwright + all required system dependencies
+      - name: Install Playwright + Browsers (with deps)
+        run: |
+          npm install playwright
+          npx playwright install --with-deps
+
+      # 5) Render the live page for the current city into rendered_<city>.html
+      - name: Render Schengen HTML for ${{ matrix.city }}
+        run: |
+          node << 'EOF'
+          const { chromium } = require('playwright');
+          (async () => {
+            const browser = await chromium.launch({ headless: true });
+            const page = await browser.newPage();
+            // Build the URL from CITY_SLUG and VISA_TYPE
+            const url = `https://schengenappointments.com/in/${process.env.CITY_SLUG}/${process.env.VISA_TYPE}`;
+            await page.goto(url, { timeout: 60000 });
+            await page.waitForSelector('tbody tr', { timeout: 60000 });
+            const html = await page.content();
+            const fs = require('fs');
+            fs.writeFileSync(`rendered_${process.env.CITY_SLUG}.html`, html, 'utf-8');
+            await browser.close();
+          })();
+          EOF
+        env:
+          CITY_SLUG: ${{ matrix.city }}
+          VISA_TYPE: "tourism"
+
+      # 6) (Optional) Debug: show the first 40 lines of rendered_<city>.html (only if it exists)
+      - name: Debug Show rendered_${{ matrix.city }}.html snippet
+        if: always()
+        run: |
+          if [ -f rendered_${{ matrix.city }}.html ]; then
+            echo "----- BEGIN rendered_${{ matrix.city }}.html (lines 1–40) -----"
+            head -n 40 rendered_${{ matrix.city }}.html
+            echo "------ END rendered_${{ matrix.city }}.html ------"
+          else
+            echo "rendered_${{ matrix.city }}.html not found; skipping debug snippet."
+          fi
+
+      # 7) Run the Python checker for this city (uses rendered_<city>.html & a city-specific state file)
+      - name: Run Schengen slot checker for ${{ matrix.city }}
+        env:
+          CITY_SLUG:        ${{ matrix.city }}
+          VISA_TYPE:        "tourism"
+          # ← Here you list all countries you want to track, comma-separated:
+          TARGET_COUNTRIES: "Cyprus,Italy,Luxembourg"
+          TELEGRAM_TOKEN:   ${{ secrets.TELEGRAM_TOKEN }}
+          CHAT_ID:          ${{ secrets.CHAT_ID }}
+          STATE_FILE:       "last_state_${{ matrix.city }}.json"
+        run: |
+          python check_schengen.py
 
       # 8) Only commit and push last_state_<city>.json if it exists & changed
       - name: Commit updated last_state file if needed
@@ -31,11 +101,14 @@ jobs:
           if [ -f last_state_${{ matrix.city }}.json ]; then
             git config user.name "github-actions[bot]"
             git config user.email "github-actions[bot]@users.noreply.github.com"
-            # Fetch the latest remote commit(s), then rebase our new JSON
+            # 1) Fetch the latest remote changes from main
             git fetch origin main
+            # 2) Rebase our local branch on top of origin/main
             git rebase origin/main
+            # 3) Stage & commit our JSON file if it changed
             git add last_state_${{ matrix.city }}.json
             git diff --cached --quiet || git commit -m "Update last_state_${{ matrix.city }}.json"
+            # 4) Push the rebased commit
             git push origin HEAD:main
           else
             echo "No last_state_${{ matrix.city }}.json to commit."
