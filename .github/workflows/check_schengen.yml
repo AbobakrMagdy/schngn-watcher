@@ -19,11 +19,12 @@ jobs:
         city: ["dubai", "abu-dhabi"]
 
     steps:
-      # 1) Checkout the repository (persist-credentials: true so we can push)
+      # 1) Checkout the repository
       - name: Checkout repository
         uses: actions/checkout@v4
         with:
           persist-credentials: true
+          fetch-depth: 0     # <— fetch full history so git push will succeed
 
       # 2) Set up Python and install pip dependencies
       - name: Set up Python & Install Python deps
@@ -69,7 +70,7 @@ jobs:
           CITY_SLUG: ${{ matrix.city }}
           VISA_TYPE: "tourism"
 
-      # 6) (Optional) Debug Show rendered_<city>.html snippet (only if file exists)
+      # 6) (Optional) Debug Show rendered_<city>.html snippet
       - name: Debug Show rendered_${{ matrix.city }}.html snippet
         if: always()
         run: |
@@ -81,12 +82,12 @@ jobs:
             echo "rendered_${{ matrix.city }}.html not found; skipping debug snippet."
           fi
 
-      # 7) Run the Python checker for this city (uses rendered_<city>.html & city-specific state file)
+      # 7) Run the Python checker for this city (uses rendered_<city>.html & a city-specific state file)
       - name: Run Schengen slot checker for ${{ matrix.city }}
         env:
           CITY_SLUG:        ${{ matrix.city }}
           VISA_TYPE:        "tourism"
-          TARGET_COUNTRIES: "Italy,Luxembourg"
+          TARGET_COUNTRIES: "Cyprus,Italy,Luxembourg"
           TELEGRAM_TOKEN:   ${{ secrets.TELEGRAM_TOKEN }}
           CHAT_ID:          ${{ secrets.CHAT_ID }}
           STATE_FILE:       "last_state_${{ matrix.city }}.json"
