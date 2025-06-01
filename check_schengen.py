@@ -5,17 +5,16 @@ import requests
 from bs4 import BeautifulSoup
 
 # ─── DEBUGGING: Marker so we know this version is running ─────────────────────
-print("### DEBUG: check_schengen.py (multi-country, notify on Waitlist or Available) ###")
+print("### DEBUG: check_schengen.py (multi-country, strict availability) ###")
 # ────────────────────────────────────────────────────────────────────────────────
 
 # ─── CONFIGURATION via environment variables ──────────────────────────────────
-CITY_SLUG        = os.getenv("CITY_SLUG", "dubai")          # e.g. "dubai" or "abu-dhabi"
+CITY_SLUG        = os.getenv("CITY_SLUG", "dubai")
 VISA_TYPE        = os.getenv("VISA_TYPE", "tourism")
-# Comma‐separated list of countries to track:
 TARGET_COUNTRIES = os.getenv("TARGET_COUNTRIES", "Cyprus,Italy,Luxembourg")
 TELEGRAM_TOKEN   = os.getenv("TELEGRAM_TOKEN", "")
 CHAT_ID          = os.getenv("CHAT_ID", "")
-STATE_FILE       = os.getenv("STATE_FILE", "last_state.json")
+STATE_FILE       = os.getenv("STATE_FILE", os.path.expanduser("last_state.json"))
 # ────────────────────────────────────────────────────────────────────────────────
 
 def send_telegram(text: str):
@@ -107,15 +106,19 @@ def check_slot():
         if norm_country in targets:
             found_any = True
 
-            # Extract “Earliest Available” from <span class="font-bold">
+            # Look only for <span class="font-bold">…</span>
             span = row.find("span", class_="font-bold")
-            earliest_text = span.get_text(strip=True) if span else ""
+            if not span:
+                # No <span class="font-bold"> means “No availability” or tooltip-only
+                print(f"### DEBUG: {raw_country} has NO <span class='font-bold'> => no availability ###")
+                earliest_text = ""  # treat as no availability
+            else:
+                earliest_text = span.get_text(strip=True)
+                print(f"### DEBUG: {norm_country} earliest_text = '{earliest_text}' ###")
 
-            print(f"### DEBUG: {norm_country} earliest_text = '{earliest_text}' ###")
-
-            # **NEW**: Notify whenever earliest_text is not exactly "No availability".
-            # This will include both actual dates AND "Waitlist Open".
-            if earliest_text != "No availability":
+            # Notify strictly when we saw a <span class="font-bold">—
+            # that covers both dates (e.g. "03 Jun") and "Waitlist Open".
+            if span and earliest_text:
                 message = (
                     f"🎉 *{raw_country}* slot status in *{CITY_SLUG.title()}*!  \n"
                     f"🗓 *Status:* {earliest_text}  \n"
@@ -123,9 +126,9 @@ def check_slot():
                 )
                 send_telegram(message)
             else:
-                print(f"### DEBUG: {raw_country} shows 'No availability'. No Telegram sent. ###")
+                print(f"### DEBUG: {raw_country} has no availability (no <span class='font-bold'>) ###")
 
-            # Save state (for record; you’re not capping notifications here)
+            # Update state (for record; we’re not gating on it)
             last_state[norm_country] = earliest_text
 
     if not found_any:
