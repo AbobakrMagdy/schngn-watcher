@@ -2,14 +2,15 @@ name: "Schengen Slot Watcher"
 
 on:
   schedule:
-    - cron: "*/25 * * * *"   # every 45 minutes
+    # Every 45 minutes
+    - cron: "*/45 * * * *"
   workflow_dispatch:        # allow manual runs
 
 jobs:
   watch_slots:
     runs-on: ubuntu-latest
 
-    # ─── Use a matrix to run the same steps for both 'dubai' and 'abu-dhabi' ───
+    # Use a matrix to run the same steps for both 'dubai' and 'abu-dhabi'
     strategy:
       matrix:
         city: ["dubai", "abu-dhabi"]
@@ -19,7 +20,7 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
         with:
-          persist-credentials: true   # needed for the final git push
+          persist-credentials: true   # needed for pushing last_state files
 
       # 2) Set up Python and install pip dependencies
       - name: Set up Python & Install Python deps
@@ -37,13 +38,13 @@ jobs:
         with:
           node-version: "18"
 
-      # 4) Install Playwright + all system dependencies
+      # 4) Install Playwright + all required system dependencies
       - name: Install Playwright + Browsers (with deps)
         run: |
           npm install playwright
           npx playwright install --with-deps
 
-      # 5) Render the live page for the current matrix city into rendered_<city>.html
+      # 5) Render the live page for the current city into rendered_<city>.html
       - name: Render Schengen HTML for ${{ matrix.city }}
         run: |
           node << 'EOF'
@@ -51,7 +52,7 @@ jobs:
           (async () => {
             const browser = await chromium.launch({ headless: true });
             const page = await browser.newPage();
-            // build the exact URL from the city slug and VISA_TYPE
+            // Build the URL from CITY_SLUG and VISA_TYPE
             const url = `https://schengenappointments.com/in/${process.env.CITY_SLUG}/${process.env.VISA_TYPE}`;
             await page.goto(url, { timeout: 60000 });
             await page.waitForSelector('tbody tr', { timeout: 60000 });
@@ -62,7 +63,6 @@ jobs:
           })();
           EOF
         env:
-          # override CITY_SLUG with the current matrix value:
           CITY_SLUG: ${{ matrix.city }}
           VISA_TYPE: "tourism"
 
@@ -74,7 +74,7 @@ jobs:
           head -n 40 rendered_${{ matrix.city }}.html
           echo "------ END rendered_${{ matrix.city }}.html ------"
 
-      # 7) Run our Python checker, pointing it at rendered_<city>.html and a state file unique to this city
+      # 7) Run the Python checker for this city (uses rendered_<city>.html & a city-specific state file)
       - name: Run Schengen slot checker for ${{ matrix.city }}
         env:
           CITY_SLUG:      ${{ matrix.city }}
@@ -82,7 +82,6 @@ jobs:
           TARGET_COUNTRY: "Italy"
           TELEGRAM_TOKEN: ${{ secrets.TELEGRAM_TOKEN }}
           CHAT_ID:        ${{ secrets.CHAT_ID }}
-          # Each city gets its own state file:
           STATE_FILE:     "last_state_${{ matrix.city }}.json"
         run: |
           python check_schengen.py
@@ -92,4 +91,12 @@ jobs:
         run: |
           if [ -f last_state_${{ matrix.city }}.json ]; then
             git config user.name "github-actions[bot]"
-            git config user.email "github-actions[bot]@users
+            git config user.email "github-actions[bot]@users.noreply.github.com"
+            git add last_state_${{ matrix.city }}.json
+            git diff --cached --quiet || git commit -m "Update last_state_${{ matrix.city }}.json"
+            git push origin HEAD:main
+          else
+            echo "No last_state_${{ matrix.city }}.json to commit."
+          fi
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
